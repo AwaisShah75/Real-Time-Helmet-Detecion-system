@@ -1,0 +1,80 @@
+# Extreme Step-by-Step Guide: Multi-Model CPU Benchmark in Google Colab
+
+Since TensorFlow (needed for TFLite export) is huge, doing this in Google Colab is a brilliant move. It saves your local PC from heavy installations and guarantees a clean, reproducible environment for your NIJEC paper empirical follow-up.
+
+Here is the exact, step-by-step process of how we will execute this benchmark inside Google Colab:
+
+---
+### STEP 1: Setting up the Colab Environment
+1. Open a new Google Colab Notebook (no need for a GPU, we are doing a CPU benchmark to prove efficiency on edge devices).
+2. Install all required benchmarking libraries. In a Colab cell, run:
+   ```python
+   !pip install ultralytics onnx onnxruntime tensorflow psutil pandas
+   ```
+3. Upload your trained YOLOv8 model (`best.pt`) to the Colab environment.
+4. Upload a short test video (e.g., `traffic.mp4`) to the Colab environment to use as the benchmark source.
+
+---
+### STEP 2: Exporting the Models
+Once `best.pt` is in Colab, we will convert it to ONNX and TFLite. YOLOv8 makes this incredibly simple. Run this Python code in the next cell:
+
+```python
+from ultralytics import YOLO
+
+# Load the PyTorch model
+model = YOLO('best.pt')
+
+# Export to ONNX (Creates best.onnx)
+print("Exporting to ONNX...")
+model.export(format='onnx', imgsz=640)
+
+# Export to TFLite (Creates best_saved_model/best_float32.tflite)
+print("Exporting to TFLite...")
+model.export(format='tflite', imgsz=640)
+```
+After this runs, you will have three models: `best.pt` (PyTorch), `best.onnx` (ONNX Runtime), and the `.tflite` file (TensorFlow Lite).
+
+---
+### STEP 3: Preparing the Benchmark Script
+In the next Colab cell, we will define a massive benchmark script. Here is exactly what that script will do under the hood:
+
+1. **Initialization Phase:**
+   - It will load the video using OpenCV (`cv2.VideoCapture`).
+   - It will read the first 300 frames into memory (a list of frames) so that video decoding/disk reading speed doesn't ruin our benchmark timing. We ONLY want to measure the model's brain, not the hard drive.
+
+2. **RAM Measurement (`psutil`):**
+   - Before a model loads, the script checks the current Python process memory using `psutil.Process(os.getpid()).memory_info().rss`.
+   - It loads the model, runs a warm-up frame, and checks the memory again. The difference is the "RAM Footprint" of that specific model.
+
+3. **Warm-Up Phase:**
+   - AI models have a "cold start" penalty on the first few frames. The script runs 10 warm-up frames for each format that aren't recorded in the final time.
+
+4. **Inference & Latency Loop:**
+   - The script loops through the 300 frames. 
+   - For **PyTorch**: It runs `model.predict(frame)`.
+   - For **ONNX**: It converts the frame to a normalized numpy array `(1, 3, 640, 640)` and runs `onnx_session.run()`.
+   - For **TFLite**: It sets the tensor data and invokes the TFLite interpreter.
+   - It wraps each inference call in `time.perf_counter()` to get extreme microsecond-accurate latency measurements.
+
+5. **Calculation:**
+   - **Average Latency:** Total time / 300 frames.
+   - **FPS:** 1.0 / Average Latency.
+
+---
+### STEP 4: Running the Benchmark
+You will copy-paste the benchmarking code I will provide into the notebook.
+When you press "Run", the script will sequentially load PyTorch -> Test -> Unload -> Load ONNX -> Test -> Unload -> Load TFLite -> Test. 
+
+---
+### STEP 5: Gathering the Results
+The script will output a Pandas DataFrame that looks exactly like a professional research paper table:
+
+| Framework       | Format  | Average Latency (ms) | FPS  | RAM Footprint (MB) |
+|-----------------|---------|----------------------|------|--------------------|
+| PyTorch         | .pt     | 85.4                 | 11.7 | 450.2              |
+| ONNX Runtime    | .onnx   | 42.1                 | 23.7 | 210.5              |
+| TensorFlow Lite | .tflite | 55.6                 | 17.9 | 185.3              |
+
+*(Note: These numbers are examples. We will generate the real ones).*
+
+You can then download these files (`best.onnx`, `best_float32.tflite`, and `benchmark_results.csv`) directly from Colab to your Windows PC to include in your project folder and paper!

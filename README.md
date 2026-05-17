@@ -51,3 +51,19 @@ The model was trained using the YOLOv8s (small) architecture on Google Colab. Ke
 - Integrated manual dataset management with Google Drive.
 - Implemented specific hyperparameters to aggressively prevent overfitting.
 - Evaluated and tested via a custom Gradio web interface before local deployment.
+
+## 📊 Empirical Multi-Model CPU Benchmark
+
+As an extension of research following the NIJEC paper, this project includes an empirical benchmarking suite to evaluate the efficiency of the trained YOLOv8 model across different inference engines on a local CPU environment (Intel Xeon). 
+
+The model was exported and evaluated using a custom benchmarking script (`colab_benchmark.py`) to measure the real-world trade-offs between speed, memory footprint, and model size.
+
+### Benchmark Results (Intel Xeon CPU)
+
+| Framework | Format | Size (MB) | Latency (ms) | FPS | RAM (MB) | mAP50 (%) |
+|:---|:---|---:|---:|---:|---:|:---|
+| PyTorch | `.pt` | 21.48 | 376.36 | 2.66 | — | 80.99 |
+| ONNX Runtime | `.onnx` | 42.76 | 579.36 | 1.73 | 48.45 | 80.99 |
+| TensorFlow Lite | `.tflite` | 42.69 | 701.82 | 1.42 | 56.88 | 80.99 |
+
+> **Research Note:** Initial benchmarks incorrectly showed PyTorch as fastest due to automatic GPU selection in Google Colab. All formats were re-benchmarked with forced CPU inference to ensure fair comparison simulating resource-constrained deployment conditions. Benchmarked on Google Colab CPU (2-core). 300 frames, 10 warmup frames excluded from timing. ONNX and TFLite FP32 are lossless exports — mAP50 identical to PyTorch baseline. PyTorch RAM measurement unreliable in Colab environment due to shared process memory; model size used as proxy for deployment footprint.
